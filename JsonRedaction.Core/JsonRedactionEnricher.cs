@@ -63,8 +63,14 @@ public class JsonRedactionEnricher : ILogEventEnricher
 
         ReadOnlySpan<char> span = input.AsSpan().Trim();
         ReadOnlySpan<char> doubleSerializePattern = "\\u0022".AsSpan();
+        ReadOnlySpan<char> doubleSerializePatternUnsafe = "\\\"".AsSpan();
 
         if (span.IndexOf(doubleSerializePattern) >= 0)
+        {
+            serializedTwice = true;
+            return true;
+        }
+        else if (span.IndexOf(doubleSerializePatternUnsafe) >= 0)
         {
             serializedTwice = true;
             return true;

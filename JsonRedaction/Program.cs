@@ -54,4 +54,7 @@ using var doubleReader = new StreamReader(doubleStream);
 var streamDoubleText = doubleReader.ReadToEnd();
 logger.LogWarning("Logging double serialized sensitive data from stream: {SensitiveData}", streamDoubleText);
 
+var unsafeDoubleJson = JsonSerializer.Serialize(stringifiedJson, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+logger.LogWarning("Logging double stringified sensitive data with unsafe escaping: {SensitiveData}", unsafeDoubleJson);
+
 app.Run();

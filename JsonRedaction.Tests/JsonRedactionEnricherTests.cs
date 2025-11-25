@@ -329,6 +329,26 @@ namespace JsonRedaction.Tests
             Assert.Contains("\"CreditCard\":\"*******************\"", redacted);
         }
 
+        [Fact]
+        public void Enrich_ShouldRedactStringifiedJson_UnsafeEscaping()
+        {
+            // Arrange
+            var serializerOptions = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+            var original = new { CreditCard = "4111-1111-1111-1111" };
+            var json = JsonSerializer.Serialize(original, serializerOptions);
+            var stringifiedJson = JsonSerializer.Serialize(json, serializerOptions);
+            var logEvent = BuildLogEvent(stringifiedJson);
+            var enricher = new JsonRedactionEnricher(new[] { "CreditCard" });
+            var factory = new TestLogEventPropertyFactory();
+            // Act
+            enricher.Enrich(logEvent, factory);
+            // Assert
+            var redacted = ((ScalarValue)logEvent.Properties["Request"]).Value as string;
+            Assert.DoesNotContain("4111-1111-1111-1111", redacted);
+            Assert.Contains("\"CreditCard\":\"*******************\"", redacted);
+        }
+
         private static LogEvent BuildLogEvent(string json)
         {
             return new LogEvent(
