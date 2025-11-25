@@ -1,5 +1,6 @@
 using Serilog;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 // Set self log for Serilog debugging
@@ -42,5 +43,15 @@ logger.LogWarning("Logging array stringified sensitive data: {SensitiveData}", l
 
 var doubleSerializedList = System.Text.Json.JsonSerializer.Serialize(list);
 logger.LogWarning("Logging array double stringified sensitive data: {SensitiveData}", doubleSerializedList);
+
+using var stream = new MemoryStream(Encoding.UTF8.GetBytes(stringifiedJson));
+using var reader = new StreamReader(stream);
+var streamText = reader.ReadToEnd();
+logger.LogWarning("Logging sensitive data from stream: {SensitiveData}", streamText);
+
+var doubleStream = new MemoryStream(Encoding.UTF8.GetBytes(doubleStringifiedJson));
+using var doubleReader = new StreamReader(doubleStream);
+var streamDoubleText = doubleReader.ReadToEnd();
+logger.LogWarning("Logging double serialized sensitive data from stream: {SensitiveData}", streamDoubleText);
 
 app.Run();
