@@ -19,12 +19,21 @@ public class JsonRedactionEnricher : ILogEventEnricher
         {
             if (property.Value is ScalarValue scalarValue &&
                 scalarValue.Value is string message &&
-                LooksLikeJson(message))
+                LooksLikeJson(message, out bool serializedTwice))
             {
                 JsonNode? json;
                 try
                 {
+                    if (serializedTwice)
+                    {
+                        message = JsonSerializer.Deserialize<string>(message)!;
+                    }
                     json = JsonNode.Parse(message);
+
+                    if (json is null)
+                    {
+                        return;
+                    }
                 }
                 catch (JsonException)
                 {
@@ -43,14 +52,23 @@ public class JsonRedactionEnricher : ILogEventEnricher
         }
     }
 
-    private bool LooksLikeJson(string input)
+    private bool LooksLikeJson(string input, out bool serializedTwice)
     {
+        serializedTwice = false;
+
         if (string.IsNullOrWhiteSpace(input))
         {
             return false;
         }
 
         ReadOnlySpan<char> span = input.AsSpan().Trim();
+        ReadOnlySpan<char> doubleSerializePattern = "\\u0022".AsSpan();
+
+        if (span.IndexOf(doubleSerializePattern) >= 0)
+        {
+            serializedTwice = true;
+            return true;
+        }
 
         return (span.Length > 1) &&
                ((span[0] == '{' && span[^1] == '}') ||
