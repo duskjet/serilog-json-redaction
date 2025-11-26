@@ -57,4 +57,7 @@ logger.LogWarning("Logging double serialized sensitive data from stream: {Sensit
 var unsafeDoubleJson = JsonSerializer.Serialize(stringifiedJson, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
 logger.LogWarning("Logging double stringified sensitive data with unsafe escaping: {SensitiveData}", unsafeDoubleJson);
 
+var arrayJson = new List<string> { stringifiedJson, doubleStringifiedJson };
+logger.LogWarning("Logging array of stringified sensitive data: {SensitiveData}", arrayJson);
+
 app.Run();

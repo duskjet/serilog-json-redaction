@@ -15,41 +15,148 @@ public class JsonRedactionEnricher : ILogEventEnricher
 
     public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
     {
-        foreach (var property in logEvent.Properties)
+        foreach (var prop in logEvent.Properties)
         {
-            if (property.Value is ScalarValue scalarValue &&
-                scalarValue.Value is string message &&
-                LooksLikeJson(message, out bool serializedTwice))
+            if (TryRedact(prop.Value, out var newValue))
             {
-                JsonNode? json;
-                try
-                {
-                    if (serializedTwice)
-                    {
-                        message = JsonSerializer.Deserialize<string>(message)!;
-                    }
-                    json = JsonNode.Parse(message);
+                logEvent.AddOrUpdateProperty(new LogEventProperty(prop.Key, newValue));
+            }
+        }
+    }
 
-                    if (json is null)
-                    {
-                        return;
-                    }
-                }
-                catch (JsonException)
+    public bool TryRedact(LogEventPropertyValue value, out LogEventPropertyValue newValue)
+    {
+        switch (value)
+        {
+            case ScalarValue sv:
+                return TryRedactScalar(sv, out newValue);
+
+            case SequenceValue seq:
+                return TryRedactSequence(seq, out newValue);
+
+            case StructureValue str:
+                return TryRedactStructure(str, out newValue);
+
+            case DictionaryValue dict:
+                return TryRedactDictionary(dict, out newValue);
+
+            default:
+                newValue = value;
+                return false;
+        }
+    }
+
+    private bool TryRedactScalar(ScalarValue sv, out LogEventPropertyValue newValue)
+    {
+        // Default
+        newValue = sv;
+
+        if (sv.Value is string s && LooksLikeJson(s, out var serializedTwice))
+        {
+            try
+            {
+                if (serializedTwice)
                 {
-                    // Ignore parsing errors and continue
-                    return;
+                    s = JsonSerializer.Deserialize<string>(s)!;
                 }
+
+                var json = JsonNode.Parse(s);
+                if (json == null)
+                    return false;
 
                 foreach (var field in _fieldsToRedact)
                 {
                     RedactPath(json, field);
                 }
 
-                message = json.ToJsonString();
-                logEvent.AddOrUpdateProperty(propertyFactory.CreateProperty(property.Key, message));
+                string newJson = json.ToJsonString();
+
+                if (newJson != s)
+                {
+                    newValue = new ScalarValue(newJson);
+                    return true;
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
             }
         }
+
+        // Non-JSON value not modified
+        return false;
+    }
+
+    private bool TryRedactSequence(SequenceValue seq, out LogEventPropertyValue newValue)
+    {
+        bool anyChanged = false;
+        var newItems = new List<LogEventPropertyValue>(seq.Elements.Count);
+
+        foreach (var item in seq.Elements)
+        {
+            bool changed = TryRedact(item, out var newItem);
+            anyChanged |= changed;
+            newItems.Add(newItem);
+        }
+
+        if (anyChanged)
+        {
+            newValue = new SequenceValue(newItems);
+            return true;
+        }
+
+        newValue = seq;
+        return false;
+    }
+
+    private bool TryRedactStructure(StructureValue str, out LogEventPropertyValue newValue)
+    {
+        bool anyChanged = false;
+        var newProps = new List<LogEventProperty>(str.Properties.Count);
+
+        foreach (var prop in str.Properties)
+        {
+            bool changed = TryRedact(prop.Value, out var newValueProp);
+            anyChanged |= changed;
+
+            newProps.Add(changed
+                ? new LogEventProperty(prop.Name, newValueProp)
+                : prop);
+        }
+
+        if (anyChanged)
+        {
+            newValue = new StructureValue(newProps, str.TypeTag);
+            return true;
+        }
+
+        newValue = str;
+        return false;
+    }
+
+    private bool TryRedactDictionary(DictionaryValue dict, out LogEventPropertyValue newValue)
+    {
+        bool anyChanged = false;
+        var newElements = new Dictionary<ScalarValue, LogEventPropertyValue>(dict.Elements.Count);
+
+        foreach (var kv in dict.Elements)
+        {
+            bool changed = TryRedact(kv.Value, out var newVal);
+            anyChanged |= changed;
+
+            newElements[kv.Key] = newVal;
+        }
+
+        if (anyChanged)
+        {
+            newValue = new DictionaryValue(newElements);
+            return true;
+        }
+
+        newValue = dict;
+        return false;
     }
 
     private bool LooksLikeJson(string input, out bool serializedTwice)
